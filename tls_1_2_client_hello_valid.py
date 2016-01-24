@@ -29,9 +29,15 @@ if __name__=="__main__":
     # create tcp socket
     s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
     s.connect(target)
-
-    # create TLS1.2 Handhsake / Client Hello packet
-    p = TLSRecord(version='TLS_1_2')/TLSHandshake()/TLSClientHello(version='TLS_1_2', cipher_suites=TLS_CIPHER_SUITES.keys())#, extensions=TLSExtension(type='signature_algorithms'))           
+    
+    
+    # create TLS1.2 Handhsake / Client Hello packet / TLS Extension for RSA-MD5 SignatureAndHashAlgorithm
+    # select CipherSuites corresponding to TLS Extension
+    p = TLSRecord(version='TLS_1_2') \
+        /TLSHandshake() \
+        /TLSClientHello(version='TLS_1_2', cipher_suites=0x0004, \
+            extensions=TLSExtension(type='signature_algorithms') \
+                        /TLSExtSignatureAndHashAlgorithm(algorithms=TLSSignatureHashAlgorithm(hash_algorithm='md5', signature_algorithm='rsa')))
     #p.show()
 
     SSL(str(p)).show()
