@@ -3,6 +3,7 @@
 # Author : tintinweb@oststrom.com <github.com/tintinweb>
 
 import sys, os
+
 try:
     import scapy.all as scapy
 except ImportError:
@@ -19,33 +20,51 @@ except ImportError:
     
 import socket
 
+tls_version = TLSVersion.TLS_1_2
+
+def tls_hello(sock) :
+    # create TLS1.2 Handhsake / Client Hello packet / TLS Extension for RSA-MD5 SignatureAndHashAlgorithm
+    # select CipherSuites corresponding to TLS Extension
+    RSA_MD5_CipherSuites = [ TLSCipherSuite.RSA_WITH_NULL_MD5, TLSCipherSuite.RSA_EXPORT_WITH_RC4_40_MD5, TLSCipherSuite.RSA_WITH_RC4_128_MD5, \
+        TLSCipherSuite.RSA_EXPORT_WITH_RC2_CBC_40_MD5 ]
+    RSA_SHA1_CipherSuites = [ TLSCipherSuite.RSA_WITH_NULL_SHA, TLSCipherSuite.RSA_WITH_RC4_128_SHA, TLSCipherSuite.RSA_WITH_IDEA_CBC_SHA, \
+        TLSCipherSuite.RSA_EXPORT_WITH_DES40_CBC_SHA, TLSCipherSuite.RSA_WITH_DES_CBC_SHA, TLSCipherSuite.RSA_WITH_3DES_EDE_CBC_SHA, \
+        TLSCipherSuite.RSA_PSK_WITH_NULL_SHA, TLSCipherSuite.RSA_WITH_AES_128_CBC_SHA, TLSCipherSuite.RSA_WITH_CAMELLIA_128_CBC_SHA, \
+        TLSCipherSuite.RSA_WITH_CAMELLIA_256_CBC_SHA, TLSCipherSuite.RSA_PSK_WITH_RC4_128_SHA, TLSCipherSuite.RSA_PSK_WITH_3DES_EDE_CBC_SHA, \
+        TLSCipherSuite.RSA_PSK_WITH_AES_128_CBC_SHA, TLSCipherSuite.RSA_PSK_WITH_AES_256_CBC_SHA, TLSCipherSuite.RSA_WITH_SEED_CBC_SHA ]
+
+    client_hello = TLSRecord(version=tls_version) \
+        /TLSHandshake() \
+        /TLSClientHello(version=tls_version, cipher_suites=RSA_MD5_CipherSuites, \
+            extensions=TLSExtension(type='signature_algorithms') \
+                        /TLSExtSignatureAndHashAlgorithm(algorithms=TLSSignatureHashAlgorithm(hash_algorithm='md5', signature_algorithm='rsa')))
+    sock.sendall(client_hello)
+    server_hello = sock.recvall()
+    client_hello.show()
+    server_hello.show()
+
 if __name__=="__main__":
     if len(sys.argv)<=2:
         print "USAGE: <host> <port>"
         exit(1)
         
     target = (sys.argv[1],int(sys.argv[2]))
-    
-    # create tcp socket
-    s = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-    s.connect(target)
-    
-    
-    # create TLS1.2 Handhsake / Client Hello packet / TLS Extension for RSA-MD5 SignatureAndHashAlgorithm
-    # select CipherSuites corresponding to TLS Extension
-    p = TLSRecord(version='TLS_1_2') \
-        /TLSHandshake() \
-        /TLSClientHello(version='TLS_1_2', cipher_suites=0x0004, \
-            extensions=TLSExtension(type='signature_algorithms') \
-                        /TLSExtSignatureAndHashAlgorithm(algorithms=TLSSignatureHashAlgorithm(hash_algorithm='md5', signature_algorithm='rsa')))
-    #p.show()
+    sock = socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
-    SSL(str(p)).show()
-    
-    print "sending TLS payload"
-    s.sendall(str(p))
-    resp = s.recv(8*1024)
-    print "received, %s"%repr(resp)
-    SSL(resp).show()
-    
-    s.close()
+    try:
+        sock.connect(target)
+        sock = TLSSocket(sock, client=True)
+        print "Connected to server: %s:%i" % target
+    except socket.timeout as te:
+        print "Failed to open connection to server: %s:%i" % target
+    else:
+        tls_hello(sock)
+        '''tls_client_key_exchange(sock)
+        print("Finished handshake. Sending application data (GET request)")
+        sock.sendall(to_raw(TLSPlaintext(data="GET / HTTP/1.1\r\nHOST: localhost\r\n\r\n"), sock.tls_ctx))
+        resp = sock.recvall()
+        print("Got response from server")
+        resp.show()
+        print(sock.tls_ctx)'''
+    finally:
+        sock.close()
